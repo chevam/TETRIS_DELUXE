@@ -4907,19 +4907,7 @@ canvas#pacmanCanvas {
     color:#fff;
     transition:all 0.3s;
 }
-.chess-turn.white {
-    background:rgba(255,255,255,0.15);
-    border-color:#fff;
-    box-shadow:0 0 15px rgba(255,255,255,0.4);
-}
-.chess-turn.black {
-    background:rgba(20,20,30,0.9);
-    border-color:#666;
-    box-shadow:0 0 15px rgba(0,0,0,0.6);
-}
-.chess-turn-icon { font-size:20px; }
-
-/* Таймеры игроков */
+/* ===== ТАЙМЕРЫ ИГРОКОВ ===== */
 .chess-timers {
     display:flex;
     gap:6px;
@@ -4975,6 +4963,27 @@ canvas#pacmanCanvas {
 }
 .chess-player-timer.active .chess-timer-time { color:#fff; }
 .chess-player-timer.danger .chess-timer-time { color:#fff; }
+.chess-turn.white {
+    background:rgba(255,255,255,0.15);
+    border-color:#fff;
+    box-shadow:0 0 15px rgba(255,255,255,0.4);
+}
+.chess-turn.black {
+    background:rgba(20,20,30,0.9);
+    border-color:#666;
+    box-shadow:0 0 15px rgba(0,0,0,0.6);
+}
+.chess-turn-icon { font-size:20px; }
+
+.chess-timer {
+    font-size:14px;
+    color:#c0c0d0;
+}
+.chess-timer b {
+    color:#ffc850;
+    font-family:monospace;
+    font-size:16px;
+}
 
 /* Статус: шах, мат, пат */
 .chess-status {
@@ -5251,6 +5260,52 @@ canvas#pacmanCanvas {
     min-height:16px;
 }
 .chess-record b { color:#ffd700; }
+
+/* ===== ВЫБОР ВРЕМЕНИ ===== */
+.chess-time-picker {
+    background:rgba(255,255,255,0.04);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:10px;
+    padding:10px;
+    margin-bottom:10px;
+}
+.chess-time-title {
+    font-size:12px;
+    color:#a0a0b0;
+    margin-bottom:8px;
+    text-align:center;
+    text-transform:uppercase;
+    letter-spacing:1px;
+}
+.chess-time-options {
+    display:flex;
+    gap:6px;
+    justify-content:center;
+    flex-wrap:wrap;
+}
+.chess-time-btn {
+    flex:1;
+    min-width:80px;
+    padding:8px 10px;
+    background:rgba(255,255,255,0.05);
+    border:2px solid rgba(255,255,255,0.15);
+    border-radius:8px;
+    color:#a0a0b0;
+    font-size:12px;
+    font-weight:bold;
+    cursor:pointer;
+    transition:all 0.2s;
+}
+.chess-time-btn:hover {
+    background:rgba(255,255,255,0.1);
+    color:#fff;
+}
+.chess-time-btn.active {
+    background:linear-gradient(135deg, rgba(255,200,80,0.4), rgba(255,150,50,0.4));
+    border-color:#ffc850;
+    color:#fff;
+    box-shadow:0 0 15px rgba(255,200,80,0.5);
+}
 
 /* Стили доски */
 .chess-board.style-blue .chess-cell.light { background:#dee3e6; }
@@ -9451,6 +9506,8 @@ body.hell-skin canvas#game {
                     <span class="chess-timer-time" id="chessBlackTime">∞</span>
                 </div>
             </div>
+        </div>
+
         <!-- Шах / мат / пат -->
         <div class="chess-status" id="chessStatus"></div>
 
@@ -9482,6 +9539,17 @@ body.hell-skin canvas#game {
             <button class="chess-btn primary" onclick="startChess()">🎬 Новая игра</button>
             <button class="chess-btn" onclick="undoChessMove()">↩ Отменить ход</button>
             <button class="chess-btn" onclick="flipChessBoard()">🔄 Повернуть доску</button>
+        </div>
+
+        <!-- Выбор времени -->
+        <div class="chess-time-picker">
+            <div class="chess-time-title">⏱ Время на партию:</div>
+            <div class="chess-time-options" id="chessTimeOptions">
+                <button class="chess-time-btn active" data-time="0" onclick="selectChessTime(0, this)">♾ Без лимита</button>
+                <button class="chess-time-btn" data-time="300" onclick="selectChessTime(300, this)">⏱ 5 мин</button>
+                <button class="chess-time-btn" data-time="600" onclick="selectChessTime(600, this)">⏱ 10 мин</button>
+                <button class="chess-time-btn" data-time="1800" onclick="selectChessTime(1800, this)">⏱ 30 мин</button>
+            </div>
         </div>
 
         <div class="chess-record" id="chessRecord">🏆 Побед белых: <b>0</b> · Побед чёрных: <b>0</b> · Ничьих: <b>0</b></div>
@@ -21383,6 +21451,12 @@ let chessRookMoved = {
 // Взятие на проходе
 let chessEnPassant = null;   // {row, col} — клетка, где можно взять
 
+// ===== ТАЙМЕРЫ ИГРОКОВ =====
+let chessTimeControl = 0;    // секунды на игрока (0 = без лимита)
+let chessWhiteTime = 0;      // оставшееся время белых
+let chessBlackTime = 0;      // оставшееся время чёрных
+let chessTimerTick = null;   // interval для отсчёта
+
 // Счётчик побед
 let chessWinsWhite = parseInt(localStorage.getItem('chessWinsWhite') || '0');
 let chessWinsBlack = parseInt(localStorage.getItem('chessWinsBlack') || '0');
@@ -21404,6 +21478,18 @@ const CHESS_PIECE_SYMBOLS = {
 function openChess() {
     closePanel('minigames');
     document.getElementById('chessScreen').classList.add('open');
+
+    // Загружаем сохранённое время
+    const savedTime = parseInt(localStorage.getItem('chessTimeControl') || '0');
+    chessTimeControl = savedTime;
+
+    // Подсвечиваем кнопку
+    const timeBtns = document.querySelectorAll('.chess-time-btn');
+    timeBtns.forEach(btn => {
+        const t = parseInt(btn.dataset.time);
+        btn.classList.toggle('active', t === savedTime);
+    });
+
     updateChessRecord();
     resetChess();
 }
@@ -21455,6 +21541,11 @@ function resetChess() {
         clearInterval(chessTimerInterval);
     }
 
+    if (chessTimerTick) clearInterval(chessTimerTick);
+    chessWhiteTime = chessTimeControl;
+    chessBlackTime = chessTimeControl;
+    updateChessPlayerTimers();
+
     // Обновляем UI
     updateChessTurnUI();
     updateChessCapturedUI();
@@ -21462,6 +21553,7 @@ function resetChess() {
     document.getElementById('chessStatus').textContent = '';
     document.getElementById('chessStatus').className = 'chess-status';
 
+    startChessPlayerTimers();
     renderChessBoard();
 }
 
@@ -21470,6 +21562,30 @@ function startChess() {
     resetChess();
     chessActive = true;
     playSfx(660, 100, 'sine', 0.2);
+}
+
+// ===== ВЫБОР ВРЕМЕНИ =====
+function selectChessTime(seconds, btn) {
+    chessTimeControl = seconds;
+
+    // Подсветка кнопки
+    if (btn) {
+        const parent = btn.parentElement;
+        if (parent) {
+            parent.querySelectorAll('.chess-time-btn').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+    }
+
+    // Сохраняем выбор
+    localStorage.setItem('chessTimeControl', seconds);
+
+    // Применяем сразу — сбрасываем таймеры
+    chessWhiteTime = seconds;
+    chessBlackTime = seconds;
+    updateChessPlayerTimers();
+
+    playSfx(500, 60, 'sine', 0.15);
 }
 
 // ===== ОТРИСОВКА ДОСКИ =====
@@ -21640,6 +21756,94 @@ function updateChessTurnUI() {
     turnEl.innerHTML = '<span class="chess-turn-icon">' + icon + '</span><span class="chess-turn-text">' + text + '</span>';
 }
 
+// ===== ТАЙМЕРЫ: ФОРМАТИРОВАНИЕ =====
+function formatChessTime(seconds) {
+    if (seconds === 0 || chessTimeControl === 0) return '∞';
+    if (seconds < 0) seconds = 0;
+    const m = Math.floor(seconds / 60);
+    const s = seconds % 60;
+    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
+}
+
+// ===== ТАЙМЕРЫ: ОБНОВЛЕНИЕ UI =====
+function updateChessPlayerTimers() {
+    const wEl = document.getElementById('chessWhiteTime');
+    const bEl = document.getElementById('chessBlackTime');
+    const wWrap = document.getElementById('chessTimerWhite');
+    const bWrap = document.getElementById('chessTimerBlack');
+
+    if (!wEl || !bEl) return;
+
+    wEl.textContent = formatChessTime(chessWhiteTime);
+    bEl.textContent = formatChessTime(chessBlackTime);
+
+    // Активный таймер
+    if (wWrap && bWrap && chessTimeControl > 0) {
+        wWrap.classList.toggle('active', chessTurn === 'white' && !chessFinished);
+        bWrap.classList.toggle('active', chessTurn === 'black' && !chessFinished);
+
+        // Тревога при <30 сек
+        wWrap.classList.toggle('danger', chessWhiteTime > 0 && chessWhiteTime <= 30);
+        bWrap.classList.toggle('danger', chessBlackTime > 0 && chessBlackTime <= 30);
+    } else if (wWrap && bWrap) {
+        wWrap.classList.remove('active', 'danger');
+        bWrap.classList.remove('active', 'danger');
+    }
+}
+
+// ===== ТАЙМЕРЫ: ЗАПУСК =====
+function startChessPlayerTimers() {
+    if (chessTimerTick) clearInterval(chessTimerTick);
+    if (chessTimeControl === 0) return;
+
+    chessTimerTick = setInterval(() => {
+        if (!chessActive || chessFinished) return;
+
+        if (chessTurn === 'white') {
+            chessWhiteTime--;
+            if (chessWhiteTime <= 0) {
+                chessWhiteTime = 0;
+                endChessByTime('white');
+                return;
+            }
+        } else {
+            chessBlackTime--;
+            if (chessBlackTime <= 0) {
+                chessBlackTime = 0;
+                endChessByTime('black');
+                return;
+            }
+        }
+        updateChessPlayerTimers();
+    }, 1000);
+}
+
+// ===== ТАЙМЕРЫ: КОНЕЦ ПО ВРЕМЕНИ =====
+function endChessByTime(loserSide) {
+    chessFinished = true;
+    chessActive = false;
+    if (chessTimerTick) clearInterval(chessTimerTick);
+
+    const statusEl = document.getElementById('chessStatus');
+    const winner = loserSide === 'white' ? 'Чёрные' : 'Белые';
+    statusEl.textContent = '⏰ Время вышло! Победили ' + winner + '!';
+    statusEl.className = 'chess-status checkmate';
+
+    if (loserSide === 'white') chessWinsBlack++; else chessWinsWhite++;
+    localStorage.setItem('chessWinsWhite', chessWinsWhite);
+    localStorage.setItem('chessWinsBlack', chessWinsBlack);
+    updateChessRecord();
+
+    // Награда
+    stars += 50;
+    saveStars();
+    updateStarsUI();
+    statusEl.textContent += ' (+50 ⭐)';
+
+    playSfx(200, 400, 'sawtooth', 0.35);
+    setTimeout(() => playSfx(150, 600, 'sawtooth', 0.4), 400);
+}
+
 function updateChessStatus(inCheckInfo) {
     const statusEl = document.getElementById('chessStatus');
     if (!statusEl) return;
@@ -21701,131 +21905,6 @@ function updateChessRecord() {
     el.innerHTML = '🏆 Побед белых: <b>' + chessWinsWhite + '</b> · Побед чёрных: <b>' +
                    chessWinsBlack + '</b> · Ничьих: <b>' + chessDraws + '</b>';
 }
-
-// ===== ТАЙМЕРЫ ИГРОКОВ =====
-let chessTimeControl = 0;       // секунды на игрока (0 = без лимита)
-let chessWhiteTime = 0;         // оставшееся время белых
-let chessBlackTime = 0;         // оставшееся время чёрных
-let chessTimerTick = null;      // interval
-
-function formatChessTime(seconds) {
-    if (seconds === 0 || chessTimeControl === 0) return '∞';
-    if (seconds < 0) seconds = 0;
-    const m = Math.floor(seconds / 60);
-    const s = seconds % 60;
-    return String(m).padStart(2, '0') + ':' + String(s).padStart(2, '0');
-}
-
-function updateChessPlayerTimers() {
-    const wEl = document.getElementById('chessWhiteTime');
-    const bEl = document.getElementById('chessBlackTime');
-    const wWrap = document.getElementById('chessTimerWhite');
-    const bWrap = document.getElementById('chessTimerBlack');
-
-    if (!wEl || !bEl) return;
-
-    wEl.textContent = formatChessTime(chessWhiteTime);
-    bEl.textContent = formatChessTime(chessBlackTime);
-
-    // Активный таймер
-    if (wWrap && bWrap && chessTimeControl > 0) {
-        wWrap.classList.toggle('active', chessTurn === 'white' && !chessFinished);
-        bWrap.classList.toggle('active', chessTurn === 'black' && !chessFinished);
-
-        // Тревога при <30 сек
-        wWrap.classList.toggle('danger', chessWhiteTime > 0 && chessWhiteTime <= 30);
-        bWrap.classList.toggle('danger', chessBlackTime > 0 && chessBlackTime <= 30);
-    } else if (wWrap && bWrap) {
-        wWrap.classList.remove('active', 'danger');
-        bWrap.classList.remove('active', 'danger');
-    }
-}
-
-function startChessPlayerTimers() {
-    if (chessTimerTick) clearInterval(chessTimerTick);
-    if (chessTimeControl === 0) return;
-
-    chessTimerTick = setInterval(() => {
-        if (!chessActive || chessFinished) return;
-
-        if (chessTurn === 'white') {
-            chessWhiteTime--;
-            if (chessWhiteTime <= 0) {
-                chessWhiteTime = 0;
-                endChessByTime('white');
-                return;
-            }
-        } else {
-            chessBlackTime--;
-            if (chessBlackTime <= 0) {
-                chessBlackTime = 0;
-                endChessByTime('black');
-                return;
-            }
-        }
-        updateChessPlayerTimers();
-    }, 1000);
-}
-
-function endChessByTime(loserSide) {
-    chessFinished = true;
-    chessActive = false;
-    if (chessTimerTick) clearInterval(chessTimerTick);
-
-    const statusEl = document.getElementById('chessStatus');
-    const winner = loserSide === 'white' ? 'Чёрные' : 'Белые';
-    statusEl.textContent = '⏰ Время вышло! Победили ' + winner + '!';
-    statusEl.className = 'chess-status checkmate';
-
-    if (loserSide === 'white') chessWinsBlack++; else chessWinsWhite++;
-    localStorage.setItem('chessWinsWhite', chessWinsWhite);
-    localStorage.setItem('chessWinsBlack', chessWinsBlack);
-    updateChessRecord();
-
-    // Награда
-    stars += 50;
-    saveStars();
-    updateStarsUI();
-    statusEl.textContent += ' (+50 ⭐)';
-
-    playSfx(200, 400, 'sawtooth', 0.35);
-    setTimeout(() => playSfx(150, 600, 'sawtooth', 0.4), 400);
-}
-
-// Обновляем updateChessTurnUI — вызываем таймеры
-const _originalUpdateChessTurnUI = updateChessTurnUI;
-updateChessTurnUI = function() {
-    _originalUpdateChessTurnUI();
-    updateChessPlayerTimers();
-};
-
-// Обновляем resetChess — сброс таймеров
-const _originalResetChess7_2 = resetChess;
-resetChess = function() {
-    _originalResetChess7_2();
-    if (chessTimerTick) clearInterval(chessTimerTick);
-    chessWhiteTime = chessTimeControl;
-    chessBlackTime = chessTimeControl;
-    updateChessPlayerTimers();
-};
-
-// Обновляем makeChessMove — перезапуск таймеров
-const _originalMakeChessMove7_2 = makeChessMove;
-makeChessMove = function(from, to) {
-    _originalMakeChessMove7_2(from, to);
-    updateChessPlayerTimers();
-};
-
-// Обновляем checkChessGameEnd — остановка таймеров при конце
-const _originalCheckChessGameEnd7_2 = checkChessGameEnd;
-checkChessGameEnd = function() {
-    _originalCheckChessGameEnd7_2();
-    if (chessFinished && chessTimerTick) {
-        clearInterval(chessTimerTick);
-        chessTimerTick = null;
-    }
-};
-
 
 // ===== ДОП. ФУНКЦИИ ШАХМАТ =====
 
@@ -22394,30 +22473,10 @@ function makeChessMove(from, to) {
 
     // Нотация хода
     const files = 'abcdefgh';
+    const fromStr = files[from.col] + (8 - from.row);
     const toStr = files[to.col] + (8 - to.row);
-    const isCapture = targetPiece || (moveInfo && moveInfo.special === 'enpassant');
+    moveNotation = fromStr + (targetPiece || (moveInfo && moveInfo.special === 'enpassant') ? 'x' : '-') + toStr;
 
-    // Рокировка — особая нотация
-    if (moveInfo && moveInfo.special === 'castle-short') {
-        moveNotation = '0-0';
-    } else if (moveInfo && moveInfo.special === 'castle-long') {
-        moveNotation = '0-0-0';
-    } else {
-        // Обычный ход
-        let prefix = '';
-        if (lower === 'p') {
-            // Пешка — без буквы
-            if (isCapture) {
-                // Взятие пешкой: exd5
-                prefix = files[from.col] + 'x';
-            }
-        } else {
-            // Фигура — со символом
-            const pieceSym = CHESS_PIECE_SYMBOLS[piece] || lower.toUpperCase();
-            prefix = pieceSym + (isCapture ? 'x' : '');
-        }
-        moveNotation = prefix + toStr;
-    }
     // Проверяем, превращение ли это
     const promoRow = isWhite ? 0 : 7;
     if (to.row === promoRow && lower === 'p') {
@@ -22439,7 +22498,7 @@ function makeChessMove(from, to) {
 
     // Записываем ход для отмены
     chessMoves.push(stateBefore);
-    // chessMoveHistory.push(moveNotation); // УДАЛЕНО — записываем после проверки на мат
+    chessMoveHistory.push(moveNotation);
 
     // Меняем ход
     chessTurn = chessTurn === 'white' ? 'black' : 'white';
@@ -22447,19 +22506,6 @@ function makeChessMove(from, to) {
     chessPossibleMoves = [];
     chessLastMove = {from, to};
 
-    // Проверяем шах/мат для НОВОГО хода
-    const endInfo = isKingInCheck(chessBoard, chessTurn);
-    if (endInfo.inCheck) {
-        const hasMoves = hasAnyLegalMoves(chessBoard, chessTurn);
-        if (!hasMoves) {
-            moveNotation += '#'; // мат
-        } else {
-            moveNotation += '+'; // шах
-        }
-    }
-
-    // Записываем ход в историю
-    chessMoveHistory.push(moveNotation);
     // Обновляем UI
     updateChessTurnUI();
     updateChessCapturedUI();
@@ -22469,6 +22515,7 @@ function makeChessMove(from, to) {
     // Проверяем мат/пат
     checkChessGameEnd();
 
+    updateChessPlayerTimers();
     playSfx(400, 60, 'sine', 0.15);
 }
 
@@ -22484,6 +22531,7 @@ function checkChessGameEnd() {
             // МАТ
             chessFinished = true;
             chessActive = false;
+            if (chessTimerTick) clearInterval(chessTimerTick);
             const winner = chessTurn === 'white' ? 'Чёрные' : 'Белые';
             statusEl.textContent = '🏆 МАТ! Победили ' + winner + '!';
             statusEl.className = 'chess-status checkmate';
@@ -22510,6 +22558,7 @@ function checkChessGameEnd() {
             // ПАТ
             chessFinished = true;
             chessActive = false;
+            if (chessTimerTick) clearInterval(chessTimerTick);
             statusEl.textContent = '🤝 ПАТ! Ничья.';
             statusEl.className = 'chess-status stalemate';
 
@@ -22560,18 +22609,8 @@ function promotePawn(pieceType) {
     // Ставим новую фигуру
     chessBoard[to.row][to.col] = piece;
 
-    // Обновляем нотацию — добавляем =♕ и проверяем мат
-    const pieceSymbol = CHESS_PIECE_SYMBOLS[isWhite ? pieceType.toUpperCase() : pieceType];
-
-    // Проверяем шах/мат
-    let suffix = '';
-    const endInfo = isKingInCheck(chessBoard, chessTurn);
-    if (endInfo.inCheck) {
-        const hasMoves = hasAnyLegalMoves(chessBoard, chessTurn);
-        suffix = hasMoves ? '+' : '#';
-    }
-
-    const promoNotation = moveNotation + '=' + pieceSymbol + suffix;
+    // Обновляем нотацию
+    const promoNotation = moveNotation + '=' + pieceType.toUpperCase();
     chessMoveHistory.push(promoNotation);
 
     // Обновляем en passant
@@ -22597,6 +22636,7 @@ function promotePawn(pieceType) {
 
     checkChessGameEnd();
 
+    updateChessPlayerTimers();
     playSfx(660, 100, 'sine', 0.25);
 }
 
